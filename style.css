@@ -1,0 +1,19 @@
+@import url(https://fonts.googleapis.com/css?family=Lobster);
+body {
+    background-color: #000;
+    overflow: hidden;
+    padding: 0;
+    margin: 0;
+    height: 100vh;
+    width: 100vw;
+}
+
+#myCanvas {
+    background-color: #001530;
+    display: block;
+    margin: 0;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: -1;
+}
