@@ -3,7 +3,7 @@ canDraw = myCanvas.getContext('2d');
 //Create vars to control the width and height of the canvas
 let maxX = innerWidth;
 let maxY = innerHeight;
-let bldgSizeFactor = Math.ceil(innerWidth / 170);
+let bldgSizeFactor = Math.max(Math.ceil(innerWidth / 170), 7);
 //This function sets the maxX and maxY values to the max width and height of the window
 let resizeFunc = function(){
     maxX = window.innerWidth;
