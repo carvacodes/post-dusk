@@ -1,301 +1,433 @@
-let myCanvas = document.getElementById('myCanvas'),
-canDraw = myCanvas.getContext('2d');
-//Create vars to control the width and height of the canvas
-let maxX = innerWidth;
-let maxY = innerHeight;
-let bldgSizeFactor = Math.max(Math.ceil(innerWidth / 170), 7);
-//This function sets the maxX and maxY values to the max width and height of the window
-let resizeFunc = function(){
-    maxX = window.innerWidth;
-    maxY = window.innerHeight;
-    myCanvas.width = maxX;
-    myCanvas.height = maxY;
-};
+/***************************/
+/*                         */
+/*         Classes         */
+/*                         */
+/***************************/
 
-//Size the canvas to the screen on load
-onload = resizeFunc;
-//Reload the screen, resulting in a new skyline
-onresize = function(){
-  resizeFunc;
-};
+// Using a fixed set of RNG values dramatically improves processing time by preventing constant calls to rng.value()
+class RNG {
+  constructor() {
+    this.iterator = 0;
+    this.queue = [];
+    for ( let i = 0; i < 65535; i++) {
+      this.queue.push(Math.random());
+    }
+  }
 
-//Create starfield array
-//First define star prototype
-class Star {
+  // the class's only method simply gets the next value in the RNG chain
+  value() {
+    this.iterator = this.iterator == this.queue.length ? 0 : this.iterator + 1;
+    return this.queue[this.iterator];
+  }
+}
+
+class SceneCanvas {
+  constructor(docCanvasId) {
+    this.canvas = document.getElementById(docCanvasId);
+    this.ctx = canvas.getContext('2d');
+  }
+
+  resizeCanvas() {
+    this.canvas.width = _w;
+    this.canvas.height = _h;
+  }
+
+  clear() {
+    this.ctx.clearRect(0, 0, _w, _h);
+  }
+}
+
+class Moon {
+  constructor(x, y, speed) {
+    this.x = x;
+    this.y = y;
+    this.speed = speed;
+  }
+
+  move(frameSpeedFactor) {
+    this.x += this.speed * frameSpeedFactor;
+    
+    if (this.y <= _h + 50 && this.x <= _w + 50) {
+      this.y += this.speed * frameSpeedFactor;
+    }
+  }
+
+  drawHalo(ctx) {
+    // draw the moon's halo
+    let bgGrad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, Math.max(_w, _h));
+
+    bgGrad.addColorStop(0, 'rgb(60,60,120)');
+    bgGrad.addColorStop(1, 'rgb(5,5,15)');
+
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, _w, _h);
+  }
+
+  drawBody(ctx) {
+    // draw the moon body
+    let bodyGrad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, 40);
+    bodyGrad.addColorStop(0.28, 'rgba(255,225,255,1)');
+    bodyGrad.addColorStop(0.88, 'rgba(248,200,255,1)');
+    bodyGrad.addColorStop(1, 'rgba(248,200,255,0)');
+
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 40, 0, Math.PI * 2)
+    ctx.fill();
+  }
+}
+
+class Starfield {
+  constructor(numStars) {
+    this.stars = [];
+
+    this.populateStars(numStars);
+  }
+
+  populateStars(numStars) {
+    for (let i = 0; this.stars.length < numStars; i++) {
+        let myX = Math.ceil(rng.value() * _w),
+        myY = Math.ceil(rng.value() * _h);
+        this.stars.push(new StaticStar(myX, myY));
+    }
+  }
+
+  drawStarfield(ctx) {
+    for (let i = 0; i < this.stars.length; i++) {
+      ctx.fillStyle = `hsl(270, 50%, ${50 + (rng.value() * 50)}%)`;
+      ctx.fillRect(this.stars[i].x, this.stars[i].y, 1, 1);
+    }
+  }
+}
+
+class StaticStar {
   constructor(x, y) {
     this.x = x;
     this.y = y;
   }
 }
-//Now create an empty array and loop through it to fill it with Star objects
-let starArray = [];
-for (let i = 0; starArray.length < 260; i++) {
-    let myX = Math.ceil(Math.random()*maxX),
-    myY = Math.ceil(Math.random()*maxY);
-    starArray.push(new Star (myX,myY));
+
+class ShootingStarController {
+  constructor() {
+    this.shootingStarsArray = [];
+  }
+
+  createShootingStar(x, y, size = 1) {
+    let s = new ShootingStar(x, y, size);
+    this.shootingStarsArray.push(s);
+  }
+
+  moveShootingStars(frameSpeedFactor) {
+    for (let i = 0; i < this.shootingStarsArray.length; i++) {
+      let s = this.shootingStarsArray[i];
+
+      if (s.x > _w || s.y > _h) {
+        this.shootingStarsArray.splice(i, 1);
+      } else {
+        s.prevX = s.x;
+        s.prevY = s.y;
+        s.x += s.speed * frameSpeedFactor;
+        s.y += s.speed * frameSpeedFactor;
+      }
+    }
+  }
+
+  checkForNewShootingStar() {
+    // randomly creates new shooting stars. called every frame.
+    let starRand = rng.value();
+    if (starRand <= 0.001) {
+      if (starRand <= 0.0001) {
+        this.shootingStarsArray.push(new ShootingStar(Math.ceil(rng.value() * _w), -10, Math.ceil(rng.value() * 4)));
+      } else {
+        this.shootingStarsArray.push(new ShootingStar(Math.ceil(rng.value() * _w), -10));
+      }
+    }
+  }
+
+  drawShootingStars(ctx) {
+    ctx.strokeStyle = "#FFF";
+
+    for (let i = 0; i < this.shootingStarsArray.length; i++) {
+      let s = this.shootingStarsArray[i];
+
+      if (s.size >= 3) {
+        let glowGrad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 5 * s.size);
+        glowGrad.addColorStop(0, 'rgba(255,255,255,' + 0.1 * s.size + ')');
+        glowGrad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = glowGrad;
+        ctx.fillRect(s.x - 10 * s.size / 2, s.y - 10 * s.size / 2, 30 * s.size, 30 * s.size);
+      }
+
+      ctx.lineWidth = s.size;
+      ctx.beginPath();
+      ctx.moveTo(s.prevX, s.prevY);
+      ctx.lineTo(s.x, s.y);
+      ctx.stroke();
+    }
+  }
 }
 
-//Create building array
-//First define building prototype
+class ShootingStar {
+  constructor(x, y, size) {
+    this.x = x;
+    this.y = y;
+    this.prevX = this.x;
+    this.prevY = this.y;
+    this.size = size;
+    this.speed = 16 - size;
+  }
+} 
+
+class Skyline {
+  constructor() {
+    this.buildingArray = [];
+
+    this.constructSkyline();
+  }
+
+  // constructs a skyline of building objects
+  constructSkyline() {
+    let totalWidth = 0;      // tracks the screen width traversed so far to ensure the entire width is covered
+    let towerNum = 0;        // limits the number of red dot towers
+    let lastBuildHeight = 0; // lastBuildHeight will ensure that two buildings of the same height are not adjacent to one another
+
+    this.buildingArray = [];
+
+    while (totalWidth < _w) {
+        let myWinHeight = (rng.value() < 0.1) ? 20 : 10;
+        let myH = Math.ceil(rng.value() * 15) * myWinHeight;
+        let myW;
+        let myX;
+        let myY;
+        let myTop;
+        //Check if height needs to be recalculated
+        if (myH === lastBuildHeight) {
+          myH = Math.ceil(rng.value() * 15) * myWinHeight;
+        }
+
+        myW = Math.ceil(rng.value() * bldgSizeFactor) * bldgSizeFactor;
+
+        //Check if width needs to be recalculated
+        if (myW == bldgSizeFactor && towerNum < 3) {
+          myW = Math.ceil(rng.value() * bldgSizeFactor) * bldgSizeFactor;
+        }
+
+        if (myW <= bldgSizeFactor) {
+          myH += lastBuildHeight + 40;
+          towerNum += 1;
+        }
+
+        myX = totalWidth;
+        myY = _h - myH;
+        myTop = (rng.value() < 0.075 && myW > bldgSizeFactor) ? 1 : 0;
+        this.buildingArray.push(new Building (myX, myY, myW, myH, myTop));
+
+        totalWidth += myW;
+        lastBuildHeight = myH;
+    }
+  }
+  
+  updateBuildings(frameSpeedFactor) {
+    for (let i = 0; i < this.buildingArray.length; i++) {
+      this.buildingArray[i].updateBuilding(frameSpeedFactor);
+    }
+
+    this.tryUpdateWindows();
+  }
+
+  drawSkyline(ctx) {
+    for (let i = 0; i < this.buildingArray.length; i++) {
+      let b = this.buildingArray[i];
+      ctx.fillStyle = "#000";
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+
+      if (b.triTop == 1) {
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y);
+        ctx.lineTo(b.x + b.w / 2, b.y - b.triHeight);
+        ctx.lineTo(b.x + b.w, b.y);
+        ctx.fill();
+      }
+      
+      if (b.hasDot && b.dotTimer > 30) {
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = 'rgb(255, 0, 0)';
+
+        ctx.fillStyle = 'rgb(200, 0, 0)';
+        ctx.beginPath();
+        ctx.arc(b.x + (b.w / 2), b.y - (b.triHeight) - 4, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+      }
+    }
+  }
+
+  drawWindows(ctx) {
+    ctx.shadowBlur = 5;
+    ctx.shadowColor = "#EE9";
+    ctx.fillStyle = "#EE9";
+    for (let i = 0; i < this.buildingArray.length; i++) {
+      let building = this.buildingArray[i];
+      for (let j = 0; j < building.windows.length; j++) {
+        let w = building.windows[j];
+        if (!w.on) { continue; }
+        ctx.fillRect(w.x + 1, w.y + 1,
+                     building.windowWidth - 2, building.windowHeight - 2);
+      }
+    }
+
+    ctx.shadowBlur = 0;
+  }
+
+  tryUpdateWindows() {
+    let r = rng.value() * 1000;
+    if (r <= 2) {
+      let bIndex = Math.floor(this.buildingArray.length * rng.value());
+      let building = this.buildingArray[bIndex];
+      if (building.windows.length > 0) {
+        building.updateSingleRandomWindow();
+      }
+    }
+  }
+}
+
 class Building {
-  constructor(x, y, w, h, winHeight, triTop) {
+  constructor(x, y, w, h, triTop) {
     this.x = x;
     this.y = y;
     this.w = w;
     this.h = h;
-    this.winHeight = winHeight;
+
     this.triTop = triTop;
+    this.triHeight = this.triTop ? this.w / Math.round(3 - (rng.value() * 2)) : 0;
+
+    this.windowWidth;
+    this.windowHeight;    
+    this.windows = [];
+
+    this.dotTimer = Math.round(rng.value() * 60);
+    this.hasDot = this.windowWidth * 2 <= this.w || rng.value() < 0.1;
+
+    this.populateWindows();
+  }
+
+  populateWindows() {
+    this.windowWidth = 6 + Math.round(rng.value() * 2);
+
+    if (this.windowWidth * 2 > this.w) { return; }
+
+    this.windowHeight = rng.value() < 0.75 ? this.windowWidth : Math.round(this.windowWidth * 2);
+
+    for (let i = 0; i < this.h; i += this.windowHeight) {
+      for (let j = 0; j < this.w - this.windowWidth; j += this.windowWidth) {
+        let w = new Window(this.x + j, this.y + i);
+        this.windows.push(w);
+      }
+    }
+  }
+
+  updateBuilding(frameSpeedFactor) {
+    this.dotTimer = this.dotTimer > 0 ? this.dotTimer - frameSpeedFactor : 60;
+  }
+
+  updateSingleRandomWindow() {
+    let wIndex = Math.floor(this.windows.length * rng.value());
+    this.windows[wIndex].on = this.windows[wIndex].on ? false : true;
   }
 }
 
-let totalWidth = 0,  //Define totalWidth variable to stop creating buildings once the total width is greater than maxX
-towerNum = 0,        //towerNum will limit the number of red-dot towers that can be created
-lastBuildHeight = 0, //lastBuildHeight will ensure that two buildings of the same height are not adjacent to one another
-buildingArray = [];  //Now create an empty array and loop through it to fill it with Building objects
-for (let i = 0; totalWidth < maxX; i++) {
-    let myWinHeight = (Math.random() < 0.1) ? 20 : 10;
-    let myH = Math.ceil(Math.random() * 15) * myWinHeight;
-    let myW;
-    let myX;
-    let myY;
-    let myTop;
-    //Check if height needs to be recalculated
-    if (myH === lastBuildHeight) {
-        myH = Math.ceil(Math.random() * 15) * myWinHeight;
-    }
-    myW = Math.ceil(Math.random() * bldgSizeFactor) * bldgSizeFactor;
-    //Check if width needs to be recalculated
-    if (myW == bldgSizeFactor && towerNum < 3) {
-        myW = Math.ceil(Math.random() * bldgSizeFactor) * bldgSizeFactor;
-    }
-    if (myW <= bldgSizeFactor) {
-        myH += 40;
-        towerNum += 1;
-    }
-    myX = totalWidth;
-    myY = maxY - myH;
-    myTop = (Math.random() < 0.1 && myW > bldgSizeFactor) ? 1 : 0;
-    buildingArray.push(new Building (myX, myY, myW, myH, myWinHeight, myTop));
-    totalWidth += myW;
-    lastBuildHeight = myH;
-}
-
-//Create window array
-//First define window prototype
-class Windowlight {
-  constructor(x, y, lit, tall) {
+class Window {
+  constructor(x, y) {
     this.x = x;
     this.y = y;
-    this.lit = lit;
-    this.tall = tall;
+    this.on = rng.value() < 0.075;
   }
 }
 
-//Create an array of windows and fill it
-let windowLightArray = [];
-for (let i = 0; i < buildingArray.length; i++) {
-    if (buildingArray[i].w > bldgSizeFactor) {
-        for (let j = 0; j < buildingArray[i].w; j += bldgSizeFactor) {
-            for (let k = 0; k < buildingArray[i].h; k += buildingArray[i].winHeight) {
-                if (Math.random() < 0.1) {
-                    let myX = (buildingArray[i].x + j) + 1,
-                    myY = (buildingArray[i].y + k) + 1;
-                    windowLightArray.push(new Windowlight(myX, myY, 1, buildingArray[i].winHeight));
-                }
-                else {
-                    let myX = (buildingArray[i].x + j) + 1,
-                    myY = (buildingArray[i].y + k) + 1;
-                    windowLightArray.push(new Windowlight(myX, myY, 0, buildingArray[i].winHeight));
-                }
-            }
-        }
-    }
-}
+/***************************/
+/*                         */
+/*         Globals         */
+/*                         */
+/***************************/
 
-//Create a prototype for red dots
-class RedDot {
-  constructor(x, y, myCounter) {
-    this.x = x;
-    this.y = y;
-    this.myCounter = Math.ceil(Math.random() * 50);
-  }
-}
-//Create an array of red dots for towers of width 10 or less
-let dotArray = [];
+let rng = new RNG();
 
-for (let i = 0; i < buildingArray.length; i++) {
-    if (buildingArray[i].w == 10) {
-        let myX = buildingArray[i].x + 5,
-        myY = buildingArray[i].y - 5;
-        dotArray.push(new RedDot (myX,myY));
-    }
-}
+let _w = window.innerWidth;
+let _h = window.innerHeight;
 
-//Create the moon
-let moonX = Math.ceil(Math.random() * innerWidth / 5);
-let moonY = -10;
-let moonDir = 0.05;
-    
-class ShootingStar {
-  constructor(x, y, size = 1) {
-    this.x = x;
-    this.y = y;
-    this.size = size;
-    this.speed = 8 - size;
-  }
-}
+let sceneCanvas = new SceneCanvas('canvas');
 
-//Create the shooting stars
-let shootingStarsArray = [];
+//Create vars to control the width and height of the canvas
+let bldgSizeFactor = Math.max(Math.ceil(_w / 170), 7);
 
-let shootingStar = new ShootingStar(Math.ceil(Math.random() * maxX), -10);
-shootingStarsArray.push(shootingStar);
+//This function sets the _w and _h values to the max width and height of the window
+let resizeWindow = function(){
+  _w = window.innerWidth;
+  _h = window.innerHeight;
+};
 
-//Set variables to control the background color
-let bgTop = moonY / maxY;
-let fadeOut = 0;    
+//Size the canvas to the screen on load or resize
+window.addEventListener('load', sceneCanvas.resizeCanvas);
+window.addEventListener('resize', sceneCanvas.resizeCanvas);
+
+let moon = new Moon(Math.round(rng.value() * (_w / 5)), -10, 0.1)
+let starfield = new Starfield(260);
+let shootingStarController = new ShootingStarController();
+let skyline = new Skyline();
+
+let fadeOut = 0;
 
 document.addEventListener('click', function(e){
   e.preventDefault();
-  shootingStarsArray.push(new ShootingStar(e.clientX, e.clientY, Math.ceil(Math.random() * 4)));
+  shootingStarController.createShootingStar(e.clientX, e.clientY, Math.ceil(rng.value() * 4));
 });
 
+// variables to track the time elapsed between each frame
+let firstFrameTime = performance.now();
+let frameSpeedFactor = 1;
+let tempFrameSpeedFactor = 0;
 
-let currentTime = Date.now();
+function draw(callbackTime) {
+  // target 30fps by dividing the monitor's refresh rate by 30 to calculate per-frame movement
+  tempFrameSpeedFactor = Math.min(callbackTime - firstFrameTime, 30);   // set a minimum to avoid frame timer buildup when the window is not focused
+  firstFrameTime = callbackTime;
+  frameSpeedFactor = tempFrameSpeedFactor / 30;
 
-function draw() {
-  let frameTime = Date.now();
-  if (frameTime - currentTime < 16) {
-    window.requestAnimationFrame(draw);
-    return;
-  }
-  currentTime = frameTime;
-
-  canDraw.clearRect(0,0,maxX,maxY);
-  //Draw the backgrounds
-  let bgGrad = canDraw.createRadialGradient(moonX, moonY, 0, moonX, moonY, Math.max(innerWidth, innerHeight));
-  bgGrad.addColorStop(0, 'rgb(60,60,120)');
-  bgGrad.addColorStop(1, 'rgb(5,5,15)');
-  canDraw.fillStyle = bgGrad;
-  canDraw.fillRect(0,0,maxX,maxY);
-  bgTop = moonY / maxY;
+  sceneCanvas.clear();
   
-  //Draw starfield
-  for (let i = 0; i < starArray.length; i++) {
-      canDraw.globalAlpha = 1 - (Math.random()/1.5);
-      canDraw.fillStyle = "#FAF";
-      canDraw.fillRect(starArray[i].x,starArray[i].y,1,1);
-  }
-  canDraw.globalAlpha = 1;
+  moon.drawHalo(sceneCanvas.ctx);
+  starfield.drawStarfield(sceneCanvas.ctx);
   
-  //Shooting star drawing and logic
-  let starRand = Math.random();
-  if (starRand <= 0.0001) {
-    shootingStarsArray.push(new ShootingStar(Math.ceil(Math.random() * maxX), -10, Math.ceil(Math.random() * 4)));
-  } else if (starRand <= 0.001) {
-    shootingStarsArray.push(new ShootingStar(Math.ceil(Math.random() * maxX), -10));
-  }
+  moon.move(frameSpeedFactor);
+  moon.drawBody(sceneCanvas.ctx);
 
-  canDraw.strokeStyle = "#FFF";
-  shootingStarsArray.forEach(star => {
-    let index = shootingStarsArray.indexOf(star);
-
-    // if stars are particularly large/slow, draw a halo around them, with less alpha as they get closer to the center of the screen
-    if (star.size >= 3) {
-      let starGrad = canDraw.createRadialGradient(star.x, star.y, 0, star.x, star.y, 5 * star.size);
-      starGrad.addColorStop(0, 'rgba(255,255,255,' + 0.1 * star.size + ')');
-      starGrad.addColorStop(1, 'rgba(255,255,255,0)');
-      canDraw.fillStyle = starGrad;
-      canDraw.fillRect(star.x - 10 * star.size / 2, star.y - 10 * star.size / 2, 30 * star.size, 30 * star.size);
-    }
-
-    canDraw.lineWidth = star.size;
-    canDraw.beginPath();
-    canDraw.moveTo(star.x - star.speed, star.y - star.speed)
-    canDraw.lineTo(star.x, star.y)
-    canDraw.stroke();
-
-    if (star.x > maxX + 50 || star.x < -20 || star.y > maxY + 50) {
-        shootingStarsArray.splice(index, 1);
-    }
-    else {
-        star.x += star.speed;
-        star.y += star.speed;
-    }
-  });
+  shootingStarController.moveShootingStars(frameSpeedFactor);
+  shootingStarController.drawShootingStars(sceneCanvas.ctx);
+  shootingStarController.checkForNewShootingStar();
   
-  //Draw moon and move it
-  let moonGrad = canDraw.createRadialGradient(moonX, moonY, 0, moonX, moonY,40);
-  moonGrad.addColorStop(0.28, 'rgba(255,225,255,1)');
-  moonGrad.addColorStop(0.88, 'rgba(248,200,255,1)');
-  moonGrad.addColorStop(1, 'rgba(248,200,255,0)');
-  canDraw.fillStyle = moonGrad;
-  canDraw.beginPath();
-  canDraw.arc(moonX,moonY,40,0,Math.PI*2,0)
-  canDraw.fill();
-  moonX += moonDir;
-  if (moonY > maxY + 50 || moonX > maxX + 50 || moonX < -42) {
-      moonY = moonY;
-  }
-  else {
-      moonY += 0.05;
-  }
-  
-  //Draw buildings - dynamic foreground
-  for (let k = 0; k < buildingArray.length; k++) {
-    canDraw.fillStyle = "#000";
-    canDraw.fillRect(buildingArray[k].x,buildingArray[k].y,buildingArray[k].w,buildingArray[k].h);
-    if (buildingArray[k].triTop === 1) {
-        canDraw.beginPath();
-        canDraw.moveTo(buildingArray[k].x,buildingArray[k].y);
-        canDraw.lineTo(buildingArray[k].x + buildingArray[k].w / 2, buildingArray[k].y - buildingArray[k].winHeight * 4);
-        canDraw.lineTo(buildingArray[k].x + buildingArray[k].w, buildingArray[k].y);
-        canDraw.fill();
-    }
-  }
-  
-  //Draw windows - dynamic foreground
-  for (let j = 0; j < windowLightArray.length; j++) {
-      if (windowLightArray[j].lit) {
-          canDraw.fillStyle = "#EE9";
-          canDraw.fillRect(windowLightArray[j].x,windowLightArray[j].y,6,windowLightArray[j].tall - 4);
-          if (Math.random() < 0.00002) {
-              windowLightArray[j].lit = 0;
-          }
-      }
-      else if (windowLightArray[j].lit === 0) {
-          canDraw.fillStyle = "#020202";
-          canDraw.fillRect(windowLightArray[j].x,windowLightArray[j].y,6,windowLightArray[j].tall - 4);
-          if (Math.random() < 0.00001) {
-              windowLightArray[j].lit = 1;
-          } 
-      }
-  }
-  //Draw the red dot on towers with a width of 10
-  for (let m = 0; m < dotArray.length; m++) {
-      if (dotArray[m].myCounter % 100 > 50) {
-          canDraw.fillStyle = "#F00";
-      }
-      else {
-          canDraw.fillStyle = "#010203";
-      }
-      canDraw.beginPath();
-      canDraw.arc(dotArray[m].x + 0.5,dotArray[m].y,2,0,Math.PI*2);
-      canDraw.fill();
-      dotArray[m].myCounter++;
-  }
-  canDraw.globalAlpha = 1;
-  if (moonY > maxY || moonX > maxX + 40 || moonX < -40 && fadeOut < 1) {
-    canDraw.fillStyle = 'rgba(0,0,0,' + fadeOut + ')';
-    canDraw.fillRect(0,0,maxX,maxY);
+  skyline.drawSkyline(sceneCanvas.ctx);
+  skyline.drawWindows(sceneCanvas.ctx);
+  skyline.updateBuildings(frameSpeedFactor);
+
+  // fade the scene once the moon has gone beyond the bounds of the screen
+  if (moon.y > _h || moon.x > _w + 40 || moon.x < -40 && fadeOut < 1) {
+    sceneCanvas.ctx.fillStyle = 'rgba(0,0,0,' + fadeOut + ')';
+    sceneCanvas.ctx.fillRect(0, 0, _w, _h);
     fadeOut += 0.001;
   }
+
+  // completely regenerate the scene once the fade reaches 1 (fully faded out)
   if (fadeOut >= 1) {
+    moon = new Moon(Math.round(rng.value() * (_w / 5)), -10, 0.1)
+    starfield = new Starfield(260);
+    shootingStarController = new ShootingStarController();
+    skyline = new Skyline();
+
     fadeOut = 0;
-    moonY = -50;
-    moonX = 100 + (Math.random() * (innerWidth - 100));
   }
+
   window.requestAnimationFrame(draw);
 }
 
-draw();
+window.requestAnimationFrame(draw);
