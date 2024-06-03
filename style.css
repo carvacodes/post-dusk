@@ -8,12 +8,7 @@ body {
     width: 100vw;
 }
 
-#myCanvas {
-    background-color: #001530;
-    display: block;
-    margin: 0;
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: -1;
+canvas {
+    height: 100%;
+    widthL 100vw;
 }

@@ -45,7 +45,7 @@ class Moon {
   }
 
   move(frameSpeedFactor) {
-    this.x += this.speed * frameSpeedFactor;
+    this.x += this.speed * frameSpeedFactor * window.devicePixelRatio;
     
     if (this.y <= _h + 50 && this.x <= _w + 50) {
       this.y += this.speed * frameSpeedFactor;
@@ -65,14 +65,14 @@ class Moon {
 
   drawBody(ctx) {
     // draw the moon body
-    let bodyGrad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, 40);
+    let bodyGrad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, 40 * window.devicePixelRatio);
     bodyGrad.addColorStop(0.28, 'rgba(255,225,255,1)');
     bodyGrad.addColorStop(0.88, 'rgba(248,200,255,1)');
     bodyGrad.addColorStop(1, 'rgba(248,200,255,0)');
 
     ctx.fillStyle = bodyGrad;
     ctx.beginPath();
-    ctx.arc(this.x, this.y, 40, 0, Math.PI * 2)
+    ctx.arc(this.x, this.y, 40 * window.devicePixelRatio, 0, Math.PI * 2)
     ctx.fill();
   }
 }
@@ -95,7 +95,7 @@ class Starfield {
   drawStarfield(ctx) {
     for (let i = 0; i < this.stars.length; i++) {
       ctx.fillStyle = `hsl(270, 50%, ${50 + (rng.value() * 50)}%)`;
-      ctx.fillRect(this.stars[i].x, this.stars[i].y, 1, 1);
+      ctx.fillRect(this.stars[i].x, this.stars[i].y, window.devicePixelRatio, window.devicePixelRatio);
     }
   }
 }
@@ -126,8 +126,8 @@ class ShootingStarController {
       } else {
         s.prevX = s.x;
         s.prevY = s.y;
-        s.x += s.speed * frameSpeedFactor;
-        s.y += s.speed * frameSpeedFactor;
+        s.x += s.speed * frameSpeedFactor * window.devicePixelRatio;
+        s.y += s.speed * frameSpeedFactor * window.devicePixelRatio;
       }
     }
   }
@@ -150,15 +150,16 @@ class ShootingStarController {
     for (let i = 0; i < this.shootingStarsArray.length; i++) {
       let s = this.shootingStarsArray[i];
 
+      let scaledSize = s.size * window.devicePixelRatio;
       if (s.size >= 3) {
-        let glowGrad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 5 * s.size);
+        let glowGrad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 5 * scaledSize);
         glowGrad.addColorStop(0, 'rgba(255,255,255,' + 0.1 * s.size + ')');
         glowGrad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.fillStyle = glowGrad;
-        ctx.fillRect(s.x - 10 * s.size / 2, s.y - 10 * s.size / 2, 30 * s.size, 30 * s.size);
+        ctx.fillRect(s.x - 10 * scaledSize / 2, s.y - 10 * scaledSize / 2, 30 * scaledSize, 30 * scaledSize);
       }
 
-      ctx.lineWidth = s.size;
+      ctx.lineWidth = scaledSize;
       ctx.beginPath();
       ctx.moveTo(s.prevX, s.prevY);
       ctx.lineTo(s.x, s.y);
@@ -174,7 +175,7 @@ class ShootingStar {
     this.prevX = this.x;
     this.prevY = this.y;
     this.size = size;
-    this.speed = 16 - size;
+    this.speed = 16 - size * window.devicePixelRatio;
   }
 } 
 
@@ -194,28 +195,26 @@ class Skyline {
     this.buildingArray = [];
 
     while (totalWidth < _w) {
-        let myWinHeight = (rng.value() < 0.1) ? 20 : 10;
-        let myH = Math.ceil(rng.value() * 15) * myWinHeight;
+        let myWinHeight = (rng.value() < 0.1) ? 20 * window.devicePixelRatio : 10 * window.devicePixelRatio;
+        let myH = Math.ceil(rng.value() * 15) * myWinHeight * window.devicePixelRatio;
         let myW;
         let myX;
         let myY;
         let myTop;
         //Check if height needs to be recalculated
         if (myH === lastBuildHeight) {
-          myH = Math.ceil(rng.value() * 15) * myWinHeight;
+          myH = Math.ceil(rng.value() * 15) * myWinHeight * window.devicePixelRatio;
         }
 
-        myW = Math.ceil(rng.value() * bldgSizeFactor) * bldgSizeFactor;
+        myW = Math.ceil(rng.value() * bldgSizeFactor) * window.devicePixelRatio;
 
         //Check if width needs to be recalculated
-        if (myW == bldgSizeFactor && towerNum < 3) {
-          myW = Math.ceil(rng.value() * bldgSizeFactor) * bldgSizeFactor;
-        }
-
-        if (myW <= bldgSizeFactor) {
-          myH += lastBuildHeight + 40;
-          towerNum += 1;
-        }
+        // if (myW <= bldgSizeFactor && towerNum < 3) {
+        //   myH += lastBuildHeight * 1.25;
+        //   towerNum += 1;
+        // } else if (myW <= bldgSizeFactor && towerNum >= 3) {
+        //   myW *= 2;
+        // }
 
         myX = totalWidth;
         myY = _h - myH;
@@ -250,12 +249,12 @@ class Skyline {
       }
       
       if (b.hasDot && b.dotTimer > 30) {
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 8 * window.devicePixelRatio;
         ctx.shadowColor = 'rgb(255, 0, 0)';
 
         ctx.fillStyle = 'rgb(200, 0, 0)';
         ctx.beginPath();
-        ctx.arc(b.x + (b.w / 2), b.y - (b.triHeight) - 4, 2, 0, Math.PI * 2);
+        ctx.arc(b.x + (b.w / 2), b.y - (b.triHeight) - (4 * window.devicePixelRatio), 2 * window.devicePixelRatio, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.shadowBlur = 0;
@@ -264,7 +263,8 @@ class Skyline {
   }
 
   drawWindows(ctx) {
-    ctx.shadowBlur = 5;
+    let d = window.devicePixelRatio;
+    ctx.shadowBlur = 5 * d;
     ctx.shadowColor = "#EE9";
     ctx.fillStyle = "#EE9";
     for (let i = 0; i < this.buildingArray.length; i++) {
@@ -272,8 +272,8 @@ class Skyline {
       for (let j = 0; j < building.windows.length; j++) {
         let w = building.windows[j];
         if (!w.on) { continue; }
-        ctx.fillRect(w.x + 1, w.y + 1,
-                     building.windowWidth - 2, building.windowHeight - 2);
+        ctx.fillRect(w.x + d, w.y + d,
+                     building.windowWidth - (2 * d), building.windowHeight - (2 * d));
       }
     }
 
@@ -300,24 +300,23 @@ class Building {
     this.h = h;
 
     this.triTop = triTop;
-    this.triHeight = this.triTop ? this.w / Math.round(3 - (rng.value() * 2)) : 0;
-
-    this.windowWidth;
-    this.windowHeight;    
+    this.triHeight = this.triTop ? (this.w / Math.round(3 - (rng.value() * 2))) * window.devicePixelRatio : 0;
+    
+    this.windowWidth = (6 + Math.round(rng.value() * 2)) * window.devicePixelRatio;
+    this.windowHeight = rng.value() < 0.75 ? this.windowWidth : Math.round(this.windowWidth * 2);
     this.windows = [];
 
     this.dotTimer = Math.round(rng.value() * 60);
-    this.hasDot = this.windowWidth * 2 <= this.w || rng.value() < 0.1;
+    this.hasDot = this.windowWidth * 2 >= this.w;
+    console.log(this.windowWidth * 2, this.w, this.hasDot)
 
     this.populateWindows();
   }
 
   populateWindows() {
-    this.windowWidth = 6 + Math.round(rng.value() * 2);
 
     if (this.windowWidth * 2 > this.w) { return; }
 
-    this.windowHeight = rng.value() < 0.75 ? this.windowWidth : Math.round(this.windowWidth * 2);
 
     for (let i = 0; i < this.h; i += this.windowHeight) {
       for (let j = 0; j < this.w - this.windowWidth; j += this.windowWidth) {
@@ -353,23 +352,23 @@ class Window {
 
 let rng = new RNG();
 
-let _w = window.innerWidth;
-let _h = window.innerHeight;
+let _w = window.innerWidth * window.devicePixelRatio;
+let _h = window.innerHeight * window.devicePixelRatio;
 
 let sceneCanvas = new SceneCanvas('canvas');
 
 //Create vars to control the width and height of the canvas
-let bldgSizeFactor = Math.max(Math.ceil(_w / 170), 7);
+let bldgSizeFactor = Math.max(Math.ceil(_w / 170), 70);
 
 //This function sets the _w and _h values to the max width and height of the window
 let resizeWindow = function(){
-  _w = window.innerWidth;
-  _h = window.innerHeight;
+  _w = window.innerWidth * window.devicePixelRatio;
+  _h = window.innerHeight * window.devicePixelRatio;
 };
 
 //Size the canvas to the screen on load or resize
 window.addEventListener('load', sceneCanvas.resizeCanvas);
-window.addEventListener('resize', sceneCanvas.resizeCanvas);
+window.addEventListener('resize', ()=>{ window.location.reload(); });
 
 let moon = new Moon(Math.round(rng.value() * (_w / 5)), -10, 0.1)
 let starfield = new Starfield(260);
